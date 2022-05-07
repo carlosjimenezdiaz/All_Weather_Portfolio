@@ -88,7 +88,6 @@ data_Portfolio <- PerformanceAnalytics::Return.portfolio(db_returns,
   as.data.frame() %>%
   rownames_to_column(var = "date")
 
-
 # Splitting data_Portfolio according to the type of the data
 Portfolio_Returns <- data_Portfolio %>%
   dplyr::mutate(date = as.Date(date)) %>%
@@ -323,8 +322,8 @@ if(Risk_Parity_Flag == TRUE){
     tail(n = 1) %>%
     t() %>%
     as.data.frame() %>%
-    purrr::set_names("Asset_Allocation") %>%
-    dplyr::mutate(Asset_Allocation = percent(Asset_Allocation, accuracy = 0.01)) %>%
+    purrr::set_names("Asset Allocation") %>%
+    dplyr::mutate(`Asset Allocation` = percent(`Asset Allocation`, accuracy = 0.01)) %>%
     kable(escape = F, align = c("c", "c")) %>%
     kable_styling("striped", full_width = F) %>%
     add_footnote(str_glue("Asset Allocation for {AA_Risk_Parity %>%
@@ -337,8 +336,8 @@ if(Risk_Parity_Flag == TRUE){
   data.frame(Tickers = symbols,
              Weights = AA_Risk_Parity) %>%
     column_to_rownames(var = "Tickers") %>%
-    purrr::set_names("Asset_Allocation") %>%
-    dplyr::mutate(Asset_Allocation = percent(Asset_Allocation, accuracy = 0.01)) %>%
+    purrr::set_names("Asset Allocation") %>%
+    dplyr::mutate(`Asset Allocation` = percent(`Asset Allocation`, accuracy = 0.01)) %>%
     kable(escape = F, align = c("c", "c")) %>%
     kable_styling("striped", full_width = F) %>%
     add_footnote(str_glue("Asset Allocation for {AA_Risk_Parity %>%
