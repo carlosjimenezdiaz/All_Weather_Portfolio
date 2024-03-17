@@ -1,10 +1,9 @@
 # Libraries ----
-library(tidyquant)
-library(tidyverse)
-library(scales)
-library(kableExtra)
-library(riskParityPortfolio)
-library(gt)
+if (!require("tidyquant")) install.packages("tidyquant"); library(tidyquant)
+if (!require("tidyverse")) install.packages("tidyverse"); library(tidyverse)
+if (!require("scales")) install.packages("scales"); library(scales)
+if (!require("riskParityPortfolio")) install.packages("riskParityPortfolio"); library(riskParityPortfolio)
+if (!require("gt")) install.packages("gt"); library(gt)
 
 # Local Variables ----
 investment_rp    <- 100000
@@ -15,11 +14,13 @@ Risk_Parity_Flag <- TRUE # If you want to calculate dynamic weights using Risk P
 Rebal_Frequency  <- "months" # can be: "years", "quarters", "months", "weeks", "days"
 
 # Calculating the Returns ----
-db_returns <- symbols %>% # Type as many tickers as you want
+prices <- symbols %>% # Type as many tickers as you want
   tq_get(get  = "stock.prices",
          from = Sys.Date() - lubridate::years(100),
          to   = Sys.Date()) %>% 
-  select(symbol, date, adjusted) %>% 
+  select(symbol, date, adjusted)
+
+db_returns <- prices %>% 
   group_by(symbol) %>% 
   tq_transmute(select     = adjusted,
                mutate_fun = periodReturn,
@@ -71,9 +72,13 @@ db_returns <- db_returns %>%
   column_to_rownames(var = "date") %>%
   as.xts()
 
-AA_Risk_Parity <- AA_Risk_Parity %>%
-  column_to_rownames(var = "date") %>%
-  as.xts() 
+if(Risk_Parity_Flag == TRUE){
+  AA_Risk_Parity <- AA_Risk_Parity %>%
+    column_to_rownames(var = "date") %>%
+    as.xts() 
+}else{
+  AA_Risk_Parity <- AA_Risk_Parity
+}
 
 # Setting the first row as ZERO (first day of trading)
 db_returns[1,] <- 0
@@ -134,7 +139,7 @@ Portfolio_Returns %>%
     title    = md("**All Weather Portfolio**"),
     subtitle = "Monthly Performance (%)"
   ) %>%
-  fmt_missing(
+  sub_missing(
     columns = 1:13,
     missing_text = ""
   )
@@ -146,7 +151,7 @@ data_Portfolio %>%
                 date = as.Date(date)) %>%
   purrr::set_names(c("date", "NAV")) %>%
   ggplot(aes(x = date, y = NAV)) + 
-    geom_line(alpha = 0.70, size = 1, colour = "steelblue") +
+    geom_line(alpha = 0.70, linewidth = 1, colour = "steelblue") +
     theme_tq() +
     labs(title    = str_glue("Equity Curve - Initial NAV: {dollar_format(prefix = '', suffix = '$')(investment_rp)}"),
          subtitle = "Daily Scale",
@@ -165,7 +170,7 @@ PerformanceAnalytics::Drawdowns(Portfolio_Returns %>%
   rownames_to_column(var = "date") %>%
   dplyr::mutate(date = as.Date(date)) %>%
   ggplot(aes(x = date, y = DD)) + 
-  geom_line(alpha = 0.70, size = 1, colour = "steelblue") +
+  geom_line(alpha = 0.70, linewidth = 1, colour = "steelblue") +
   theme_tq() +
   labs(title    = str_glue("Drawdown Curve - Initial NAV: {dollar_format(prefix = '', suffix = '$')(investment_rp)}"),
        subtitle = "Daily Scale",
@@ -313,8 +318,11 @@ data.frame(Total_Returns         = Total_Returns,
   gather() %>%
   dplyr::mutate(key = c("Total Returns", "CAGR", "Annualized Volatility", "Annualized Sharpe Ratio", "Max Drawdown", "Best Monthly Return", "Worst monthly return", "% Positive Months", "Month-to-Date", "Quarter-to-Date", "Year-to-Date")) %>%
   purrr::set_names(c("Metric", "Value")) %>%
-  kable(escape = F, align = c("l", "c")) %>%
-  kable_styling("striped", full_width = F)
+  gt() %>%
+  tab_header(
+    title    = md("**All Weather Portfolio**"),
+    subtitle = "Key Performance Metrics"
+  )
 
 # Curent AA ----
 if(Risk_Parity_Flag == TRUE){
@@ -323,29 +331,53 @@ if(Risk_Parity_Flag == TRUE){
     t() %>%
     as.data.frame() %>%
     purrr::set_names("Asset Allocation") %>%
-    dplyr::mutate(`Asset Allocation` = percent(`Asset Allocation`, accuracy = 0.01)) %>%
-    kable(escape = F, align = c("c", "c")) %>%
-    kable_styling("striped", full_width = F) %>%
-    add_footnote(str_glue("Asset Allocation for {AA_Risk_Parity %>%
-                                                    tail(n = 1) %>%
-                                                    as.data.frame() %>%
-                                                    rownames_to_column(var = 'date') %>%
-                                                    dplyr::select(date) %>%
-                                                    pull(1)}"))
+    rownames_to_column(var = "symbol") %>%
+    left_join(prices %>%
+                dplyr::filter(date == max(date)) %>%
+                as.data.frame(), by = "symbol") %>%
+    dplyr::select(-date) %>%
+    dplyr::mutate(Investment = (db_portfolio$NAV %>% tail(n=1))*`Asset Allocation`,
+                  Shares     = (Investment/adjusted) %>% round(digits = 0),
+                  `Asset Allocation` = percent(`Asset Allocation`, accuracy = 0.01)) %>%
+    dplyr::rename("Close Price" = "adjusted") %>%
+    gt() %>%
+    tab_header(
+      title    = md("**Asset Allocation**"),
+      subtitle = str_glue("{AA_Risk_Parity %>%
+                          tail(n = 1) %>%
+                          as.data.frame() %>%
+                          rownames_to_column(var = 'date') %>%
+                          dplyr::select(date) %>%
+                          pull(1)}")) %>%
+      fmt_currency(
+        columns = c("Close Price", "Investment"),
+        currency = "USD"
+      )
 }else{
-  data.frame(Tickers = symbols,
-             Weights = AA_Risk_Parity) %>%
-    column_to_rownames(var = "Tickers") %>%
-    purrr::set_names("Asset Allocation") %>%
-    dplyr::mutate(`Asset Allocation` = percent(`Asset Allocation`, accuracy = 0.01)) %>%
-    kable(escape = F, align = c("c", "c")) %>%
-    kable_styling("striped", full_width = F) %>%
-    add_footnote(str_glue("Asset Allocation for {AA_Risk_Parity %>%
-                                                    tail(n = 1) %>%
-                                                    as.data.frame() %>%
-                                                    rownames_to_column(var = 'date') %>%
-                                                    dplyr::select(date) %>%
-                                                    pull(1)}"))    
+  data.frame(symbol = symbols,
+             `Asset Allocation` = AA_Risk_Parity) %>%
+    left_join(prices %>%
+                dplyr::filter(date == max(date)) %>%
+                as.data.frame(), by = "symbol") %>%
+    dplyr::select(-date) %>%
+    dplyr::rename("Asset Allocation" = "Asset.Allocation") %>%
+    dplyr::mutate(Investment = (db_portfolio$NAV %>% tail(n=1))*`Asset Allocation`,
+                  Shares     = (Investment/adjusted) %>% round(digits = 0),
+                  `Asset Allocation` = percent(`Asset Allocation`, accuracy = 0.01)) %>%
+    dplyr::rename("Close Price" = "adjusted") %>%
+    gt() %>%
+    tab_header(
+      title    = md("**Asset Allocation**"),
+      subtitle = str_glue("{AA_Risk_Parity %>%
+                          tail(n = 1) %>%
+                          as.data.frame() %>%
+                          rownames_to_column(var = 'date') %>%
+                          dplyr::select(date) %>%
+                          pull(1)}")) %>%
+    fmt_currency(
+      columns = c("Close Price", "Investment"),
+      currency = "USD"
+    )
 }
 
 
