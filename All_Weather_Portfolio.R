@@ -120,6 +120,7 @@ YTD_Returns <- Portfolio_Returns %>%
   dplyr::select(-Portfolio_Return_Log)
 
 Portfolio_Returns %>%
+  dplyr::filter(lubridate::year(date) > 2008) %>%
   dplyr::mutate(Year = lubridate::year(date),
                 Month = lubridate::month(date),
                 Portfolio_Return_Log = log(1 + portfolio.returns)) %>%
